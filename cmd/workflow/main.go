@@ -1,16 +1,19 @@
 package main
 
 import (
+	"crypto/md5"
 	"flag"
 	"fmt"
-	"github.com/deanishe/awgo"
+	"net/url"
+	"os"
+	"path"
+	"strings"
+
+	aw "github.com/deanishe/awgo"
 	"github.com/mdreizin/chrome-bookmarks-alfred-workflow/pkg/bookmarks"
 	"github.com/mdreizin/chrome-bookmarks-alfred-workflow/pkg/browsers"
 	"github.com/mdreizin/chrome-bookmarks-alfred-workflow/pkg/profiles"
 	"github.com/mdreizin/chrome-bookmarks-alfred-workflow/pkg/workflows"
-	"os"
-	"path"
-	"strings"
 )
 
 var (
@@ -33,6 +36,23 @@ func init() {
 	flag.StringVar(&command, "command", "", "")
 
 	wf = aw.New()
+}
+
+func getCacheIconFile(urlstring string) string {
+	u, err := url.Parse(urlstring)
+	if err != nil {
+		return ""
+	}
+
+	data := []byte(u.Host)
+	has := md5.Sum(data)
+	md5str := fmt.Sprintf("%x", has)
+	path := fmt.Sprintf("/tmp/Favicons-Cache/%v.png", md5str)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return ""
+	}
+
+	return path
 }
 
 func run() error {
@@ -76,11 +96,16 @@ func run() error {
 
 		if len(bookmarkSlice) > 0 {
 			for _, bookmark := range bookmarkSlice {
-				wf.NewItem(bookmark.Name).
+				item := wf.NewItem(bookmark.Name).
 					Subtitle(bookmark.URL).
 					Arg(bookmark.URL).
-					Valid(true).
-					NewModifier(aw.ModCmd).
+					Valid(true)
+				cachedIconFile := getCacheIconFile(bookmark.URL)
+				if len(cachedIconFile) > 0 {
+					item.Icon(&aw.Icon{Type: "png", Value: cachedIconFile})
+				}
+
+				item.NewModifier(aw.ModCmd).
 					Subtitle(strings.Join(bookmark.Path, " → "))
 			}
 		} else {
